@@ -1,0 +1,25 @@
+[
+  { "id": "w101", "x": 3.5, "y": 2.0, "label": "Aula A", "floor": 0 },
+  { "id": "w102", "x": 5.0, "y": 2.5, "label": "Sala komputerowa", "floor": 0 },
+  { "id": "w103", "x": 1.5, "y": 1.0, "label": "Dziekanat", "floor": 0 },
+  { "id": "w104", "x": 4.0, "y": 5.0, "label": "Schody główne p.0", "floor": 0 },
+  { "id": "w105", "x": 3.0, "y": 5.0, "label": "Winda p.0", "floor": 0 },
+  { "id": "w106", "x": 6.5, "y": 4.5, "label": "WC Damskie", "floor": 0 },
+  { "id": "w107", "x": 7.0, "y": 4.5, "label": "WC Męskie", "floor": 0 },
+  { "id": "w108", "x": 4.0, "y": 0.5, "label": "Wyjście główne", "floor": 0 },
+  { "id": "w109", "x": 4.0, "y": 3.0, "label": "Korytarz p.0", "floor": 0 },
+
+  { "id": "w201", "x": 2.0, "y": 1.5, "label": "Sala 201", "floor": 1 },
+  { "id": "w202", "x": 4.0, "y": 2.0, "label": "Laboratorium fizyczne", "floor": 1 },
+  { "id": "w203", "x": 6.0, "y": 1.5, "label": "Pokój wykładowców", "floor": 1 },
+  { "id": "w204", "x": 4.0, "y": 5.0, "label": "Schody główne p.1", "floor": 1 },
+  { "id": "w205", "x": 3.0, "y": 5.0, "label": "Winda p.1", "floor": 1 },
+  { "id": "w209", "x": 4.0, "y": 3.0, "label": "Korytarz p.1", "floor": 1 },
+
+  { "id": "w301", "x": 3.5, "y": 2.5, "label": "Sala konferencyjna", "floor": 2 },
+  { "id": "w302", "x": 5.5, "y": 1.5, "label": "Gabinet Dziekana", "floor": 2 },
+  { "id": "w303", "x": 2.0, "y": 1.0, "label": "Taras widokowy", "floor": 2 },
+  { "id": "w304", "x": 4.0, "y": 5.0, "label": "Schody główne p.2", "floor": 2 },
+  { "id": "w305", "x": 3.0, "y": 5.0, "label": "Winda p.2", "floor": 2 },
+  { "id": "w309", "x": 4.0, "y": 3.0, "label": "Korytarz p.2", "floor": 2 }
+]

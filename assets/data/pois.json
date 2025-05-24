@@ -1,0 +1,186 @@
+[
+  {
+    "id": "101",
+    "name": "Aula A",
+    "description": "Duża aula wykładowa z trzema rzędami ławek w układzie amfiteatralnym. Często wykorzystywana do dużych wydarzeń akademickich.",
+    "type": "room",
+    "x": 3.5,
+    "y": 2.0,
+    "floorId": 0,
+    "imagePath": "assets/images/pois/aula_a.png",
+    "equipment": ["Projektor", "Klimatyzacja", "Mikrofon", "Ekran", "Komputer"],
+    "capacity": 200
+  },
+  {
+    "id": "102",
+    "name": "Sala komputerowa",
+    "description": "Nowoczesna pracownia komputerowa z pełnym oprogramowaniem inżynierskim i naukowym.",
+    "type": "room",
+    "x": 5.0,
+    "y": 2.5,
+    "floorId": 0,
+    "imagePath": "assets/images/pois/lab_komputerowe.png",
+    "equipment": ["Komputer", "Projektor", "Tablica interaktywna", "Wifi"],
+    "capacity": 30
+  },
+  {
+    "id": "103",
+    "name": "Dziekanat",
+    "description": "Biuro dziekanatu Wydziału Informatyki, obsługa studentów.",
+    "type": "room",
+    "x": 1.5,
+    "y": 1.0,
+    "floorId": 0,
+    "imagePath": "assets/images/pois/dziekanat.png",
+    "equipment": ["Komputer", "Wifi"],
+    "capacity": 10
+  },
+  {
+    "id": "104",
+    "name": "Schody główne",
+    "description": "Główne schody komunikacyjne łączące wszystkie piętra budynku.",
+    "type": "stairs",
+    "x": 4.0,
+    "y": 5.0,
+    "floorId": 0
+  },
+  {
+    "id": "105",
+    "name": "Winda",
+    "description": "Winda osobowa dostosowana dla osób z niepełnosprawnością.",
+    "type": "elevator",
+    "x": 3.0,
+    "y": 5.0,
+    "floorId": 0,
+    "imagePath": "assets/images/pois/winda.png"
+  },
+  {
+    "id": "106",
+    "name": "WC Damskie",
+    "description": "Toaleta damska",
+    "type": "wc",
+    "x": 6.5,
+    "y": 4.5,
+    "floorId": 0
+  },
+  {
+    "id": "107",
+    "name": "WC Męskie",
+    "description": "Toaleta męska",
+    "type": "wc",
+    "x": 7.0,
+    "y": 4.5,
+    "floorId": 0
+  },
+  {
+    "id": "108",
+    "name": "Wyjście główne",
+    "description": "Główne wejście do budynku",
+    "type": "exit",
+    "x": 4.0,
+    "y": 0.5,
+    "floorId": 0
+  },
+  {
+    "id": "201",
+    "name": "Sala 201",
+    "description": "Sala seminaryjna na 30 osób, często wykorzystywana do zajęć projektowych.",
+    "type": "room",
+    "x": 2.0,
+    "y": 1.5,
+    "floorId": 1,
+    "imagePath": "assets/images/pois/sala_201.png",
+    "equipment": ["Rzutnik", "Ekran", "Wifi"],
+    "capacity": 30
+  },
+  {
+    "id": "202",
+    "name": "Laboratorium fizyczne",
+    "description": "Laboratorium wyposażone w specjalistyczny sprzęt pomiarowy do badań naukowych.",
+    "type": "room",
+    "x": 4.0,
+    "y": 2.0,
+    "floorId": 1,
+    "imagePath": "assets/images/pois/lab_fizyczne.png",
+    "equipment": ["Komputer", "Specjalistyczny sprzęt laboratoryjny", "Wifi"],
+    "capacity": 20
+  },
+  {
+    "id": "203",
+    "name": "Pokój wykładowców",
+    "description": "Pokój dla kadry dydaktycznej",
+    "type": "room",
+    "x": 6.0,
+    "y": 1.5,
+    "floorId": 1
+  },
+  {
+    "id": "204",
+    "name": "Schody główne",
+    "description": "Główne schody komunikacyjne",
+    "type": "stairs",
+    "x": 4.0,
+    "y": 5.0,
+    "floorId": 1
+  },
+  {
+    "id": "205",
+    "name": "Winda",
+    "description": "Winda osobowa",
+    "type": "elevator",
+    "x": 3.0,
+    "y": 5.0,
+    "floorId": 1
+  },
+  {
+    "id": "301",
+    "name": "Sala konferencyjna",
+    "description": "Reprezentacyjna sala konferencyjna z najnowocześniejszym wyposażeniem multimedialnym.",
+    "type": "room",
+    "x": 3.5,
+    "y": 2.5,
+    "floorId": 2,
+    "imagePath": "assets/images/pois/sala_konferencyjna.png",
+    "equipment": ["Projektor 4K", "Ekran", "System audio", "Mikrofony bezprzewodowe", "Klimatyzacja", "Wifi"],
+    "capacity": 50
+  },
+  {
+    "id": "302",
+    "name": "Gabinet Dziekana",
+    "description": "Biuro Dziekana Wydziału z częścią reprezentacyjną do spotkań oficjalnych.",
+    "type": "room",
+    "x": 5.5,
+    "y": 1.5,
+    "floorId": 2,
+    "imagePath": "assets/images/pois/gabinet_dziekana.png",
+    "equipment": ["Komputer", "Telewizor", "Wifi"],
+    "capacity": 8
+  },
+  {
+    "id": "303",
+    "name": "Taras widokowy",
+    "description": "Taras z widokiem na kampus",
+    "type": "room",
+    "x": 2.0,
+    "y": 1.0,
+    "floorId": 2
+  },
+  {
+    "id": "304",
+    "name": "Schody główne",
+    "description": "Główne schody komunikacyjne",
+    "type": "stairs",
+    "x": 4.0,
+    "y": 5.0,
+    "floorId": 2
+  },
+  {
+    "id": "305",
+    "name": "Winda",
+    "description": "Winda osobowa",
+    "type": "elevator",
+    "x": 3.0,
+    "y": 5.0,
+    "floorId": 2
+  }
+]

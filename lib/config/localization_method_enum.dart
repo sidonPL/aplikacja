@@ -1,0 +1,1 @@
+enum LocalizationMethod { rssiKalman, trilateration, multilateration, fingerprinting, deadReckoning, hybrid }

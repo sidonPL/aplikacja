@@ -1,0 +1,32 @@
+[
+  { "from": "w101", "to": "w109", "distance": 1.0, "type": "corridor" },
+  { "from": "w102", "to": "w109", "distance": 1.5, "type": "corridor" },
+  { "from": "w103", "to": "w109", "distance": 2.5, "type": "corridor" },
+  { "from": "w108", "to": "w109", "distance": 2.5, "type": "corridor" },
+  { "from": "w109", "to": "w104", "distance": 2.0, "type": "corridor" },
+  { "from": "w109", "to": "w105", "distance": 2.2, "type": "corridor" },
+  { "from": "w109", "to": "w106", "distance": 3.5, "type": "corridor" },
+  { "from": "w106", "to": "w107", "distance": 0.5, "type": "corridor" },
+
+  { "from": "w201", "to": "w209", "distance": 1.5, "type": "corridor" },
+  { "from": "w202", "to": "w209", "distance": 1.0, "type": "corridor" },
+  { "from": "w203", "to": "w209", "distance": 2.5, "type": "corridor" },
+  { "from": "w209", "to": "w204", "distance": 2.0, "type": "corridor" },
+  { "from": "w209", "to": "w205", "distance": 2.2, "type": "corridor" },
+
+  { "from": "w301", "to": "w309", "distance": 1.0, "type": "corridor" },
+  { "from": "w302", "to": "w309", "distance": 2.0, "type": "corridor" },
+  { "from": "w303", "to": "w309", "distance": 2.5, "type": "corridor" },
+  { "from": "w309", "to": "w304", "distance": 2.0, "type": "corridor" },
+  { "from": "w309", "to": "w305", "distance": 2.2, "type": "corridor" },
+
+  { "from": "w104", "to": "w204", "distance": 3.0, "type": "stairs" },
+  { "from": "w204", "to": "w304", "distance": 3.0, "type": "stairs" },
+  { "from": "w105", "to": "w205", "distance": 3.0, "type": "elevator" },
+  { "from": "w205", "to": "w305", "distance": 3.0, "type": "elevator" },
+
+  { "from": "w204", "to": "w104", "distance": 3.0, "type": "stairs" },
+  { "from": "w304", "to": "w204", "distance": 3.0, "type": "stairs" },
+  { "from": "w205", "to": "w105", "distance": 3.0, "type": "elevator" },
+  { "from": "w305", "to": "w205", "distance": 3.0, "type": "elevator" }
+]

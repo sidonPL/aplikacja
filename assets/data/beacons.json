@@ -1,0 +1,16 @@
+[
+  {
+    "uuid": "B9407F30-F5F8-466E-AFF9-25556B57FE6D",
+    "name": "Beacon Korytarz A",
+    "x": 5.0,
+    "y": 3.0,
+    "rssi": -65
+  },
+  {
+    "uuid": "A1B2C3D4-E5F6-47A8-90B1-C2D3E4F5A6B7",
+    "name": "Beacon Sala 101",
+    "x": 10.0,
+    "y": 3.0,
+    "rssi": -72
+  }
+]
