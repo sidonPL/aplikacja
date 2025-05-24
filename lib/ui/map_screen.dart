@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import '../config/localization_method_enum.dart';
 import '../models/beacon.dart';
 import '../models/location.dart';
@@ -11,8 +10,8 @@ import '../services/permission_service.dart';
 import '../data/beacon_repository.dart';
 import '../data/poi_repository.dart';
 import '../services/ble_scanner.dart';
-import 'navigation_screen.dart';
-import 'search_screen.dart';
+import '../ui/navigation_screen.dart';
+import '../ui/search_screen.dart';
 
 class MapScreen extends StatefulWidget {
   @override
@@ -37,18 +36,19 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   bool _isLocationEngineRunning = false;
   int _currentFloorId = 0;
 
-  // Parametry mapy
-  double _scale = 1.0; // piksele na metr
+  // Parametry mapy - zmniejszona początkowa skala
+  double _scale = 10.0; // zmienione z 10.0 na 1.0
   Offset _mapOffset = Offset(0, 0);
 
   // Kontroler transformacji mapy
   final TransformationController _transformationController = TransformationController();
 
-  // Lista pięter
+  // Lista pięter - zmienione na PNG
   final List<Floor> _floors = [
     Floor(id: 0, name: 'Parter', width: 2200.0, height: 878.0, imagePath: 'assets/images/Floor_0.png'),
-    Floor(id: 1, name: '1 Piętro', width: 2200.0, height: 878.0, imagePath: 'assets/images/Floor_1.svg'),
-    Floor(id: 2, name: '2 Piętro', width: 2200.0, height: 878.0, imagePath: 'assets/images/Floor_2.svg'),
+    Floor(id: 1, name: '1 Piętro', width: 2200.0, height: 878.0, imagePath: 'assets/images/Floor_1.png'),
+    Floor(id: 2, name: '2 Piętro', width: 2200.0, height: 878.0, imagePath: 'assets/images/Floor_2.png'),
+    Floor(id: 3, name: '3 Piętro', width: 2200.0, height: 878.0, imagePath: 'assets/images/Floor_3.png'),
   ];
 
   @override
@@ -58,6 +58,10 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     _checkPermissions();
     _loadBeacons();
     _loadPois();
+    // Ustawienie początkowej transformacji po zbudowaniu widoku
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _setInitialTransform();
+    });
   }
 
   @override
@@ -72,12 +76,42 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    // Zarządzanie skanowaniem BLE w zależności od stanu aplikacji
     if (state == AppLifecycleState.resumed) {
       if (_isScanning) _startScanning();
     } else if (state == AppLifecycleState.paused) {
       _bleScanner.stopScan();
     }
+  }
+
+  // Nowa metoda do ustawienia początkowej transformacji
+  void _setInitialTransform() {
+    final currentFloor = _floors.firstWhere(
+          (floor) => floor.id == _currentFloorId,
+      orElse: () => _floors.first,
+    );
+
+    final screenSize = MediaQuery.of(context).size;
+    final mapWidth = currentFloor.width;
+    final mapHeight = currentFloor.height;
+
+    // Oblicz skalę, aby mapa zmieściła się na ekranie
+    final scaleX = screenSize.width / mapWidth;
+    final scaleY = (screenSize.height - 200) / mapHeight; // 200px dla paneli
+    final optimalScale = (scaleX < scaleY ? scaleX : scaleY) * 0.9; // 90% dla marginesu
+
+    setState(() {
+      _scale = optimalScale;
+    });
+
+    // Wyśrodkuj mapę
+    final matrix = Matrix4.identity()
+      ..scale(optimalScale)
+      ..translate(
+        (screenSize.width - mapWidth * optimalScale) / (2 * optimalScale),
+        (screenSize.height - mapHeight * optimalScale) / (2 * optimalScale),
+      );
+
+    _transformationController.value = matrix;
   }
 
   Future<void> _checkPermissions() async {
@@ -126,7 +160,6 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     _bleScanner.startScan();
     _bleSubscription?.cancel();
     _bleSubscription = _bleScanner.scanResults.listen((beacons) {
-      // Aktualizuj beacony z rssi
       setState(() {
         for (var beacon in beacons) {
           final index = _beacons.indexWhere((b) => b.uuid == beacon.uuid);
@@ -150,7 +183,6 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
       setState(() {
         _currentLocation = location;
 
-        // Jeśli zmieniło się piętro, zaktualizuj je
         if (location.floorId != _currentFloorId) {
           _currentFloorId = location.floorId;
         }
@@ -178,30 +210,34 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
       _currentFloorId = floorId;
       _locationEngine.setFloor(floorId);
     });
+    // Ponownie ustaw transformację dla nowego piętra
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _setInitialTransform();
+    });
   }
 
   void _centerOnLocation() {
     if (_currentLocation == null) return;
 
-    final centerX = _currentLocation!.x * _scale;
-    final centerY = _currentLocation!.y * _scale;
+    final screenSize = MediaQuery.of(context).size;
+    final centerX = _currentLocation!.x;
+    final centerY = _currentLocation!.y;
 
-    // Oblicz nową macierz transformacji dla centrowania mapy
     final matrix = Matrix4.identity()
-      ..translate(-centerX + MediaQuery.of(context).size.width / 2,
-          -centerY + MediaQuery.of(context).size.height / 2)
-      ..scale(_scale / 10); // Ustaw skalę
+      ..scale(_scale)
+      ..translate(
+        screenSize.width / (2 * _scale) - centerX,
+        screenSize.height / (2 * _scale) - centerY,
+      );
 
     _transformationController.value = matrix;
   }
 
   Future<void> _navigateToPoi(Poi poi) async {
-    // Jeśli POI jest na innym piętrze, zmień piętro
     if (poi.floorId != _currentFloorId) {
       _changeFloor(poi.floorId);
     }
 
-    // Przejdź do ekranu nawigacji
     await Navigator.push(
       context,
       MaterialPageRoute(
@@ -320,16 +356,9 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     return Scaffold(
       body: Stack(
         children: [
-          // Mapa
           _buildMapView(),
-
-          // Panel górny
           _buildTopPanel(),
-
-          // Panel przełączania pięter
           _buildFloorPanel(),
-
-          // Panel informacyjny na dole
           _buildBottomPanel(),
         ],
       ),
@@ -345,41 +374,30 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
 
     return InteractiveViewer(
       transformationController: _transformationController,
-      boundaryMargin: EdgeInsets.all(500), // Większy margines dla swobodnego przesuwania
+      boundaryMargin: EdgeInsets.all(100), // Zmniejszony margines
       minScale: 0.1,
       maxScale: 5.0,
-      child: SizedBox(
-        width: currentFloor.width * _scale,
-        height: currentFloor.height * _scale,
+      constrained: false, // Dodane dla lepszej kontroli
+      child: Container(
+        width: currentFloor.width,
+        height: currentFloor.height,
         child: Stack(
           children: [
-            // Tło mapy (plan piętra)
-            if (currentFloor.imagePath != null)
-              SvgPicture.asset(
-                currentFloor.imagePath!,
-                width: currentFloor.width * _scale,
-                height: currentFloor.height * _scale,
-                fit: BoxFit.contain,
-              )
-            else
-              Container(
-                width: currentFloor.width * _scale,
-                height: currentFloor.height * _scale,
-                color: Colors.grey[200],
-              ),
+            // Tło mapy - dodano obsługę błędów
+            _buildMapBackground(currentFloor),
 
-            // Narysuj siatkę pomocniczą
+            // Narysuj siatkę pomocniczą - skala 1:1
             CustomPaint(
-              size: Size(currentFloor.width * _scale, currentFloor.height * _scale),
-              painter: _GridPainter(scale: _scale),
+              size: Size(currentFloor.width, currentFloor.height),
+              painter: _GridPainter(scale: 1.0),
             ),
 
-            // Beacony
+            // Beacony - bez skalowania pozycji
             ..._beacons
                 .where((b) => b.floorId == _currentFloorId)
                 .map((beacon) => Positioned(
-              left: beacon.x * _scale - 5,
-              top: beacon.y * _scale - 5,
+              left: beacon.x - 5,
+              top: beacon.y - 5,
               child: GestureDetector(
                 onTap: () => _showBeaconInfo(beacon),
                 child: Container(
@@ -394,15 +412,16 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
               ),
             )),
 
-            // Punkty POI
+            // Punkty POI - bez skalowania pozycji
             ..._pois
                 .where((p) => p.floorId == _currentFloorId)
                 .map((poi) => Positioned(
-              left: poi.x * _scale - 15,
-              top: poi.y * _scale - 15,
+              left: poi.x - 15,
+              top: poi.y - 15,
               child: GestureDetector(
                 onTap: () => _showPoiInfo(poi),
                 child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     Container(
                       width: 30,
@@ -441,11 +460,11 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
               ),
             )),
 
-            // Aktualna pozycja użytkownika
+            // Aktualna pozycja użytkownika - bez skalowania pozycji
             if (_currentLocation != null && _currentLocation!.floorId == _currentFloorId)
               Positioned(
-                left: _currentLocation!.x * _scale - 10,
-                top: _currentLocation!.y * _scale - 10,
+                left: _currentLocation!.x - 10,
+                top: _currentLocation!.y - 10,
                 child: Container(
                   width: 20,
                   height: 20,
@@ -467,6 +486,77 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
         ),
       ),
     );
+  }
+
+  // Metoda do budowania tła mapy z PNG
+  Widget _buildMapBackground(Floor currentFloor) {
+    if (currentFloor.imagePath != null) {
+      return Image.asset(
+        currentFloor.imagePath!,
+        width: currentFloor.width,
+        height: currentFloor.height,
+        fit: BoxFit.contain,
+        // Obsługa błędów ładowania PNG
+        errorBuilder: (context, error, stackTrace) {
+          print('Błąd ładowania mapy: $error');
+          return Container(
+            width: currentFloor.width,
+            height: currentFloor.height,
+            color: Colors.grey[200],
+            child: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.broken_image, size: 50, color: Colors.grey[400]),
+                  SizedBox(height: 8),
+                  Text('Nie można załadować mapy', style: TextStyle(color: Colors.grey[600])),
+                  Text('${currentFloor.imagePath}',
+                      style: TextStyle(fontSize: 10, color: Colors.grey[500])),
+                ],
+              ),
+            ),
+          );
+        },
+        // Placeholder podczas ładowania
+        frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+          if (wasSynchronouslyLoaded) return child;
+          return frame == null
+              ? Container(
+            width: currentFloor.width,
+            height: currentFloor.height,
+            color: Colors.grey[200],
+            child: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 8),
+                  Text('Ładowanie mapy...', style: TextStyle(color: Colors.grey[600])),
+                ],
+              ),
+            ),
+          )
+              : child;
+        },
+      );
+    } else {
+      return Container(
+        width: currentFloor.width,
+        height: currentFloor.height,
+        color: Colors.grey[200],
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.map_outlined, size: 50, color: Colors.grey[400]),
+              SizedBox(height: 8),
+              Text('Brak mapy dla ${currentFloor.name}',
+                  style: TextStyle(color: Colors.grey[600])),
+            ],
+          ),
+        ),
+      );
+    }
   }
 
   Widget _buildTopPanel() {
@@ -573,13 +663,10 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Aktualne piętro
             Text(
               'Aktualne piętro: ${_getFloorName(_currentFloorId)}',
               style: TextStyle(fontWeight: FontWeight.bold),
             ),
-
-            // Aktualna pozycja
             if (_currentLocation != null) ...[
               SizedBox(height: 4),
               Text(
@@ -587,8 +674,6 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                 style: TextStyle(fontSize: 12),
               ),
             ],
-
-            // Metoda lokalizacji
             SizedBox(height: 4),
             Text(
               'Metoda lokalizacji: ${_locationEngine.method.toString().split('.').last}',
@@ -604,7 +689,6 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     return Column(
       mainAxisAlignment: MainAxisAlignment.end,
       children: [
-        // Przycisk włączania/wyłączania skanowania
         FloatingActionButton(
           heroTag: 'scan',
           backgroundColor: _isScanning ? Colors.red : Colors.green,
@@ -622,8 +706,6 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
           mini: true,
         ),
         SizedBox(height: 8),
-
-        // Przycisk centrowania na pozycji użytkownika
         FloatingActionButton(
           heroTag: 'location',
           backgroundColor: Colors.blue,
@@ -632,8 +714,14 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
           mini: true,
         ),
         SizedBox(height: 8),
-
-        // Przycisk menu z opcjami mapy
+        FloatingActionButton(
+          heroTag: 'reset',
+          backgroundColor: Colors.orange,
+          child: Icon(Icons.center_focus_strong),
+          onPressed: _setInitialTransform,
+          mini: true,
+        ),
+        SizedBox(height: 8),
         FloatingActionButton(
           heroTag: 'menu',
           child: Icon(Icons.menu),
@@ -670,13 +758,21 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
               },
             ),
             ListTile(
+              leading: Icon(Icons.fit_screen),
+              title: Text('Dopasuj do ekranu'),
+              onTap: () {
+                Navigator.pop(context);
+                _setInitialTransform();
+              },
+            ),
+            ListTile(
               leading: Icon(Icons.zoom_in),
               title: Text('Przybliż'),
               onTap: () {
                 Navigator.pop(context);
-                setState(() {
-                  _scale *= 1.2;
-                });
+                final currentMatrix = _transformationController.value;
+                final newMatrix = currentMatrix.clone()..scale(1.2);
+                _transformationController.value = newMatrix;
               },
             ),
             ListTile(
@@ -684,9 +780,9 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
               title: Text('Oddal'),
               onTap: () {
                 Navigator.pop(context);
-                setState(() {
-                  _scale /= 1.2;
-                });
+                final currentMatrix = _transformationController.value;
+                final newMatrix = currentMatrix.clone()..scale(0.8);
+                _transformationController.value = newMatrix;
               },
             ),
           ],
@@ -761,15 +857,12 @@ class _GridPainter extends CustomPainter {
       ..strokeWidth = 0.5
       ..style = PaintingStyle.stroke;
 
-    // Rysuj siatkę co 5 metrów
-    final gridSize = 5 * scale;
+    final gridSize = 50.0; // Stała wielkość siatki
 
-    // Linie pionowe
     for (double x = 0; x <= size.width; x += gridSize) {
       canvas.drawLine(Offset(x, 0), Offset(x, size.height), paint);
     }
 
-    // Linie poziome
     for (double y = 0; y <= size.height; y += gridSize) {
       canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
     }

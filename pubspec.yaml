@@ -73,8 +73,11 @@ flutter:
     - assets/images/Floor_0.svg
     - assets/images/Floor_0.png
     - assets/images/Floor_1.svg
+    - assets/images/Floor_1.png
     - assets/images/Floor_2.svg
+    - assets/images/Floor_2.png
     - assets/images/Floor_3.svg
+    - assets/images/Floor_3.png
     - assets/images/pois/aula_a.png
     - assets/images/pois/dziekanat.png
     - assets/images/pois/gabinet_dziekana.png
