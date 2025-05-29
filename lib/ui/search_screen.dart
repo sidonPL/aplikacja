@@ -5,11 +5,13 @@ import '../models/floor.dart';
 import '../ui/map_screen.dart';
 
 class SearchScreen extends StatefulWidget {
+  const SearchScreen({super.key});
+
   @override
-  _SearchScreenState createState() => _SearchScreenState();
+  SearchScreenState createState() => SearchScreenState();
 }
 
-class _SearchScreenState extends State<SearchScreen> {
+class SearchScreenState extends State<SearchScreen> {
   final LocalStorageService _storage = LocalStorageService();
   final TextEditingController _searchController = TextEditingController();
 
@@ -394,7 +396,7 @@ class _SearchScreenState extends State<SearchScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: Text('Filtruj według kategorii'),
-        content: Container(
+        content: SizedBox(
           width: double.maxFinite,
           child: ListView(
             shrinkWrap: true,

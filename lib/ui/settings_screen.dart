@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../config/localization_method_enum.dart';
 import '../config/theme_provider.dart';
 
@@ -8,10 +7,10 @@ class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
 
   @override
-  _SettingsScreenState createState() => _SettingsScreenState();
+  SettingsScreenState createState() => SettingsScreenState();
 }
 
-class _SettingsScreenState extends State<SettingsScreen> {
+class SettingsScreenState extends State<SettingsScreen> {
   LocalizationMethod? _selected;
   bool _isDarkMode = false;
 
@@ -50,7 +49,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               groupValue: _selected,
               onChanged: (val) => setState(() => _selected = val),
             );
-          }).toList(),
+          }),
 
           // Sekcja wyglądu
           const Padding(

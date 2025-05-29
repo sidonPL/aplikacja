@@ -14,11 +14,13 @@ import '../ui/navigation_screen.dart';
 import '../ui/search_screen.dart';
 
 class MapScreen extends StatefulWidget {
+  const MapScreen({super.key});
+
   @override
-  _MapScreenState createState() => _MapScreenState();
+  MapScreenState createState() => MapScreenState();
 }
 
-class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
+class MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   final LocationEngine _locationEngine = LocationEngine();
   final BleScanner _bleScanner = BleScanner();
   final BeaconRepository _beaconRepository = BeaconRepository();
@@ -36,14 +38,13 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   bool _isLocationEngineRunning = false;
   int _currentFloorId = 0;
 
-  // Parametry mapy - zmniejszona początkowa skala
-  double _scale = 10.0; // zmienione z 10.0 na 1.0
-  Offset _mapOffset = Offset(0, 0);
+  // Parametry mapy
+  double _scale = 10.0;
 
   // Kontroler transformacji mapy
   final TransformationController _transformationController = TransformationController();
 
-  // Lista pięter - zmienione na PNG
+  // Lista pięter
   final List<Floor> _floors = [
     Floor(id: 0, name: 'Parter', width: 2200.0, height: 878.0, imagePath: 'assets/images/Floor_0.png'),
     Floor(id: 1, name: '1 Piętro', width: 2200.0, height: 878.0, imagePath: 'assets/images/Floor_1.png'),
@@ -54,7 +55,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance?.addObserver(this);
+    WidgetsBinding.instance.addObserver(this);
     _checkPermissions();
     _loadBeacons();
     _loadPois();
@@ -70,7 +71,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     _bleSubscription?.cancel();
     _locationEngine.dispose();
     _transformationController.dispose();
-    WidgetsBinding.instance?.removeObserver(this);
+    WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 
@@ -103,723 +104,112 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
       _scale = optimalScale;
     });
 
-    // Wyśrodkuj mapę
-    final matrix = Matrix4.identity()
-      ..scale(optimalScale)
-      ..translate(
-        (screenSize.width - mapWidth * optimalScale) / (2 * optimalScale),
-        (screenSize.height - mapHeight * optimalScale) / (2 * optimalScale),
-      );
+    // Ustaw transformację mapy, aby była wyśrodkowana
+    final centerX = (screenSize.width - mapWidth * optimalScale) / 2;
+    final centerY = (screenSize.height - 200 - mapHeight * optimalScale) / 2 + 100; // 100px dla górnego panelu
 
-    _transformationController.value = matrix;
+    _transformationController.value = Matrix4.identity()
+      ..translate(centerX, centerY)
+      ..scale(optimalScale);
   }
 
   Future<void> _checkPermissions() async {
     final hasPermissions = await PermissionService.hasAllPermissions();
-    setState(() {
-      _hasPermissions = hasPermissions;
-    });
+    if (mounted) {
+      setState(() {
+        _hasPermissions = hasPermissions;
+      });
+    }
 
     if (!hasPermissions) {
       final granted = await PermissionService.requestAll();
-      setState(() {
-        _hasPermissions = granted;
-      });
-
-      if (granted) {
-        _startScanning();
-        _startLocationEngine();
+      if (mounted) {
+        setState(() {
+          _hasPermissions = granted;
+        });
       }
-    } else {
-      _startScanning();
-      _startLocationEngine();
+    }
+
+    if (_hasPermissions && mounted) {
+      await _startScanning();
     }
   }
 
   Future<void> _loadBeacons() async {
     final beacons = await _beaconRepository.getBeacons();
-    setState(() {
-      _beacons = beacons;
-    });
+    if (mounted) {
+      setState(() {
+        _beacons = beacons;
+      });
+    }
   }
 
   Future<void> _loadPois() async {
     final pois = await _poiRepository.getPois();
-    setState(() {
-      _pois = pois;
-    });
+    if (mounted) {
+      setState(() {
+        _pois = pois;
+      });
+    }
   }
 
-  void _startScanning() {
-    if (!_hasPermissions) return;
+  Future<void> _startScanning() async {
+    if (!_hasPermissions || _isScanning) return;
 
-    setState(() {
-      _isScanning = true;
-    });
+    if (mounted) {
+      setState(() {
+        _isScanning = true;
+      });
+    }
 
     _bleScanner.startScan();
-    _bleSubscription?.cancel();
-    _bleSubscription = _bleScanner.scanResults.listen((beacons) {
-      setState(() {
-        for (var beacon in beacons) {
-          final index = _beacons.indexWhere((b) => b.uuid == beacon.uuid);
-          if (index >= 0) {
-            _beacons[index] = _beacons[index].copyWith(rssi: beacon.rssi);
+
+    _bleSubscription = _bleScanner.scanResults.listen((results) {
+      if (mounted) {
+        setState(() {
+          // Aktualizuj RSSI dla istniejących beaconów
+          for (final result in results) {
+            final index = _beacons.indexWhere((b) => b.uuid == result.uuid);
+            if (index != -1) {
+              _beacons[index] = _beacons[index].copyWith(rssi: result.rssi);
+            }
           }
-        }
-      });
+        });
+      }
     });
+
+    if (!_isLocationEngineRunning) {
+      _startLocationEngine();
+    }
   }
 
   void _startLocationEngine() {
-    if (!_hasPermissions || _isLocationEngineRunning) return;
-
-    setState(() {
-      _isLocationEngineRunning = true;
-    });
-
-    _locationSubscription?.cancel();
-    _locationSubscription = _locationEngine.location$.listen((location) {
+    if (mounted) {
       setState(() {
-        _currentLocation = location;
-
-        if (location.floorId != _currentFloorId) {
-          _currentFloorId = location.floorId;
-        }
+        _isLocationEngineRunning = true;
       });
-    });
-  }
+    }
 
-  void _resetLocation() {
-    _locationEngine.resetPosition();
-    setState(() {
-      _currentLocation = null;
+    _locationSubscription = _locationEngine.location$.listen((location) {
+      if (mounted) {
+        setState(() {
+          _currentLocation = location;
+          // Aktualizuj piętro jeśli się zmieniło
+          if (_currentFloorId != location.floorId) {
+            _currentFloorId = location.floorId;
+            _locationEngine.setFloor(_currentFloorId);
+          }
+        });
+      }
     });
-  }
-
-  void _changeLocalizationMethod(LocalizationMethod method) {
-    _locationEngine.method = method;
-    _resetLocation();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Metoda lokalizacji zmieniona na: ${method.toString().split('.').last}')),
-    );
   }
 
   void _changeFloor(int floorId) {
     setState(() {
       _currentFloorId = floorId;
-      _locationEngine.setFloor(floorId);
     });
-    // Ponownie ustaw transformację dla nowego piętra
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _setInitialTransform();
-    });
-  }
-
-  void _centerOnLocation() {
-    if (_currentLocation == null) return;
-
-    final screenSize = MediaQuery.of(context).size;
-    final centerX = _currentLocation!.x;
-    final centerY = _currentLocation!.y;
-
-    final matrix = Matrix4.identity()
-      ..scale(_scale)
-      ..translate(
-        screenSize.width / (2 * _scale) - centerX,
-        screenSize.height / (2 * _scale) - centerY,
-      );
-
-    _transformationController.value = matrix;
-  }
-
-  Future<void> _navigateToPoi(Poi poi) async {
-    if (poi.floorId != _currentFloorId) {
-      _changeFloor(poi.floorId);
-    }
-
-    await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => NavigationScreen(destination: poi),
-      ),
-    );
-  }
-
-  Future<void> _showSearchScreen() async {
-    final selectedPoi = await Navigator.push<Poi>(
-      context,
-      MaterialPageRoute(
-        builder: (context) => SearchScreen(),
-      ),
-    );
-
-    if (selectedPoi != null) {
-      _navigateToPoi(selectedPoi);
-    }
-  }
-
-  void _showBeaconInfo(Beacon beacon) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Beacon: ${beacon.name}'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('UUID: ${beacon.uuid}'),
-            Text('RSSI: ${beacon.rssi} dBm'),
-            Text('Pozycja: (${beacon.x.toStringAsFixed(1)}, ${beacon.y.toStringAsFixed(1)})'),
-            Text('Piętro: ${beacon.floorId}'),
-          ],
-        ),
-        actions: [
-          TextButton(
-            child: Text('Zamknij'),
-            onPressed: () => Navigator.of(context).pop(),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showPoiInfo(Poi poi) {
-    showModalBottomSheet(
-      context: context,
-      builder: (context) => Container(
-        padding: EdgeInsets.all(16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(poi.name, style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-            SizedBox(height: 8),
-            Text('Typ: ${_getPoiTypeName(poi.type)}'),
-            SizedBox(height: 4),
-            Text('Piętro: ${_getFloorName(poi.floorId)}'),
-            if (poi.description != null && poi.description!.isNotEmpty) ...[
-              SizedBox(height: 8),
-              Text(poi.description!),
-            ],
-            if (poi.equipment.isNotEmpty) ...[
-              SizedBox(height: 8),
-              Text('Wyposażenie:', style: TextStyle(fontWeight: FontWeight.bold)),
-              SizedBox(height: 4),
-              ...poi.equipment.map((e) => Text('• $e')).toList(),
-            ],
-            if (poi.capacity != null) ...[
-              SizedBox(height: 8),
-              Text('Pojemność: ${poi.capacity} osób'),
-            ],
-            SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                icon: Icon(Icons.navigation),
-                label: Text('Nawiguj do tego miejsca'),
-                style: ElevatedButton.styleFrom(
-                  padding: EdgeInsets.symmetric(vertical: 12),
-                ),
-                onPressed: () {
-                  Navigator.pop(context);
-                  _navigateToPoi(poi);
-                },
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  String _getPoiTypeName(String type) {
-    switch (type) {
-      case 'room': return 'Sala';
-      case 'stairs': return 'Schody';
-      case 'elevator': return 'Winda';
-      case 'wc': return 'Toaleta';
-      case 'exit': return 'Wyjście';
-      default: return type;
-    }
-  }
-
-  String _getFloorName(int floorId) {
-    return _floors.firstWhere(
-          (floor) => floor.id == floorId,
-      orElse: () => Floor(id: floorId, name: 'Piętro $floorId', width: 0, height: 0),
-    ).name;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: Stack(
-        children: [
-          _buildMapView(),
-          _buildTopPanel(),
-          _buildFloorPanel(),
-          _buildBottomPanel(),
-        ],
-      ),
-      floatingActionButton: _buildFabs(),
-    );
-  }
-
-  Widget _buildMapView() {
-    final currentFloor = _floors.firstWhere(
-          (floor) => floor.id == _currentFloorId,
-      orElse: () => _floors.first,
-    );
-
-    return InteractiveViewer(
-      transformationController: _transformationController,
-      boundaryMargin: EdgeInsets.all(100), // Zmniejszony margines
-      minScale: 0.1,
-      maxScale: 5.0,
-      constrained: false, // Dodane dla lepszej kontroli
-      child: Container(
-        width: currentFloor.width,
-        height: currentFloor.height,
-        child: Stack(
-          children: [
-            // Tło mapy - dodano obsługę błędów
-            _buildMapBackground(currentFloor),
-
-            // Narysuj siatkę pomocniczą - skala 1:1
-            CustomPaint(
-              size: Size(currentFloor.width, currentFloor.height),
-              painter: _GridPainter(scale: 1.0),
-            ),
-
-            // Beacony - bez skalowania pozycji
-            ..._beacons
-                .where((b) => b.floorId == _currentFloorId)
-                .map((beacon) => Positioned(
-              left: beacon.x - 5,
-              top: beacon.y - 5,
-              child: GestureDetector(
-                onTap: () => _showBeaconInfo(beacon),
-                child: Container(
-                  width: 10,
-                  height: 10,
-                  decoration: BoxDecoration(
-                    color: Colors.blue[700],
-                    shape: BoxShape.circle,
-                    border: Border.all(color: Colors.white, width: 1),
-                  ),
-                ),
-              ),
-            )),
-
-            // Punkty POI - bez skalowania pozycji
-            ..._pois
-                .where((p) => p.floorId == _currentFloorId)
-                .map((poi) => Positioned(
-              left: poi.x - 15,
-              top: poi.y - 15,
-              child: GestureDetector(
-                onTap: () => _showPoiInfo(poi),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 30,
-                      height: 30,
-                      decoration: BoxDecoration(
-                        color: _getPoiColor(poi.type),
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black26,
-                            blurRadius: 2,
-                            offset: Offset(0, 1),
-                          ),
-                        ],
-                      ),
-                      child: Icon(
-                        _getPoiIcon(poi.type),
-                        size: 18,
-                        color: Colors.white,
-                      ),
-                    ),
-                    Container(
-                      padding: EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.8),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Text(
-                        poi.name,
-                        style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            )),
-
-            // Aktualna pozycja użytkownika - bez skalowania pozycji
-            if (_currentLocation != null && _currentLocation!.floorId == _currentFloorId)
-              Positioned(
-                left: _currentLocation!.x - 10,
-                top: _currentLocation!.y - 10,
-                child: Container(
-                  width: 20,
-                  height: 20,
-                  decoration: BoxDecoration(
-                    color: Colors.red,
-                    shape: BoxShape.circle,
-                    border: Border.all(color: Colors.white, width: 2),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black38,
-                        blurRadius: 4,
-                        offset: Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // Metoda do budowania tła mapy z PNG
-  Widget _buildMapBackground(Floor currentFloor) {
-    if (currentFloor.imagePath != null) {
-      return Image.asset(
-        currentFloor.imagePath!,
-        width: currentFloor.width,
-        height: currentFloor.height,
-        fit: BoxFit.contain,
-        // Obsługa błędów ładowania PNG
-        errorBuilder: (context, error, stackTrace) {
-          print('Błąd ładowania mapy: $error');
-          return Container(
-            width: currentFloor.width,
-            height: currentFloor.height,
-            color: Colors.grey[200],
-            child: Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.broken_image, size: 50, color: Colors.grey[400]),
-                  SizedBox(height: 8),
-                  Text('Nie można załadować mapy', style: TextStyle(color: Colors.grey[600])),
-                  Text('${currentFloor.imagePath}',
-                      style: TextStyle(fontSize: 10, color: Colors.grey[500])),
-                ],
-              ),
-            ),
-          );
-        },
-        // Placeholder podczas ładowania
-        frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
-          if (wasSynchronouslyLoaded) return child;
-          return frame == null
-              ? Container(
-            width: currentFloor.width,
-            height: currentFloor.height,
-            color: Colors.grey[200],
-            child: Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  CircularProgressIndicator(),
-                  SizedBox(height: 8),
-                  Text('Ładowanie mapy...', style: TextStyle(color: Colors.grey[600])),
-                ],
-              ),
-            ),
-          )
-              : child;
-        },
-      );
-    } else {
-      return Container(
-        width: currentFloor.width,
-        height: currentFloor.height,
-        color: Colors.grey[200],
-        child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.map_outlined, size: 50, color: Colors.grey[400]),
-              SizedBox(height: 8),
-              Text('Brak mapy dla ${currentFloor.name}',
-                  style: TextStyle(color: Colors.grey[600])),
-            ],
-          ),
-        ),
-      );
-    }
-  }
-
-  Widget _buildTopPanel() {
-    return Positioned(
-      top: 0,
-      left: 0,
-      right: 0,
-      child: SafeArea(
-        child: Container(
-          padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          color: Colors.white.withOpacity(0.9),
-          child: Row(
-            children: [
-              Icon(Icons.location_on, color: _isScanning ? Colors.green : Colors.red),
-              SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  _isScanning
-                      ? 'Lokalizowanie...'
-                      : 'Lokalizacja wyłączona',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-              ),
-              ElevatedButton(
-                onPressed: _showSearchScreen,
-                style: ElevatedButton.styleFrom(
-                  padding: EdgeInsets.symmetric(horizontal: 16),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.search, size: 18),
-                    SizedBox(width: 4),
-                    Text('Szukaj'),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildFloorPanel() {
-    return Positioned(
-      top: 80,
-      right: 16,
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(8),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black26,
-              blurRadius: 4,
-              offset: Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Column(
-          children: _floors.map((floor) {
-            final isActive = floor.id == _currentFloorId;
-            return Material(
-              color: Colors.transparent,
-              child: InkWell(
-                onTap: () => _changeFloor(floor.id),
-                child: Container(
-                  width: 50,
-                  height: 50,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    border: isActive
-                        ? Border.all(color: Colors.blue, width: 2)
-                        : null,
-                    borderRadius: BorderRadius.circular(isActive ? 6 : 0),
-                  ),
-                  child: Text(
-                    '${floor.id}',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
-                      color: isActive ? Colors.blue : Colors.black,
-                    ),
-                  ),
-                ),
-              ),
-            );
-          }).toList(),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildBottomPanel() {
-    return Positioned(
-      bottom: 0,
-      left: 0,
-      right: 0,
-      child: Container(
-        padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        color: Colors.white.withOpacity(0.9),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              'Aktualne piętro: ${_getFloorName(_currentFloorId)}',
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
-            if (_currentLocation != null) ...[
-              SizedBox(height: 4),
-              Text(
-                'Pozycja: (${_currentLocation!.x.toStringAsFixed(1)}, ${_currentLocation!.y.toStringAsFixed(1)})',
-                style: TextStyle(fontSize: 12),
-              ),
-            ],
-            SizedBox(height: 4),
-            Text(
-              'Metoda lokalizacji: ${_locationEngine.method.toString().split('.').last}',
-              style: TextStyle(fontSize: 12),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildFabs() {
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.end,
-      children: [
-        FloatingActionButton(
-          heroTag: 'scan',
-          backgroundColor: _isScanning ? Colors.red : Colors.green,
-          child: Icon(_isScanning ? Icons.pause : Icons.play_arrow),
-          onPressed: () {
-            if (_isScanning) {
-              _bleScanner.stopScan();
-              setState(() {
-                _isScanning = false;
-              });
-            } else {
-              _startScanning();
-            }
-          },
-          mini: true,
-        ),
-        SizedBox(height: 8),
-        FloatingActionButton(
-          heroTag: 'location',
-          backgroundColor: Colors.blue,
-          child: Icon(Icons.my_location),
-          onPressed: _centerOnLocation,
-          mini: true,
-        ),
-        SizedBox(height: 8),
-        FloatingActionButton(
-          heroTag: 'reset',
-          backgroundColor: Colors.orange,
-          child: Icon(Icons.center_focus_strong),
-          onPressed: _setInitialTransform,
-          mini: true,
-        ),
-        SizedBox(height: 8),
-        FloatingActionButton(
-          heroTag: 'menu',
-          child: Icon(Icons.menu),
-          onPressed: () {
-            _showMapMenu();
-          },
-        ),
-      ],
-    );
-  }
-
-  void _showMapMenu() {
-    showModalBottomSheet(
-      context: context,
-      builder: (context) => Container(
-        padding: EdgeInsets.symmetric(vertical: 16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: Icon(Icons.gps_fixed),
-              title: Text('Zmień metodę lokalizacji'),
-              onTap: () {
-                Navigator.pop(context);
-                _showLocalizationMethodDialog();
-              },
-            ),
-            ListTile(
-              leading: Icon(Icons.refresh),
-              title: Text('Zresetuj pozycję'),
-              onTap: () {
-                Navigator.pop(context);
-                _resetLocation();
-              },
-            ),
-            ListTile(
-              leading: Icon(Icons.fit_screen),
-              title: Text('Dopasuj do ekranu'),
-              onTap: () {
-                Navigator.pop(context);
-                _setInitialTransform();
-              },
-            ),
-            ListTile(
-              leading: Icon(Icons.zoom_in),
-              title: Text('Przybliż'),
-              onTap: () {
-                Navigator.pop(context);
-                final currentMatrix = _transformationController.value;
-                final newMatrix = currentMatrix.clone()..scale(1.2);
-                _transformationController.value = newMatrix;
-              },
-            ),
-            ListTile(
-              leading: Icon(Icons.zoom_out),
-              title: Text('Oddal'),
-              onTap: () {
-                Navigator.pop(context);
-                final currentMatrix = _transformationController.value;
-                final newMatrix = currentMatrix.clone()..scale(0.8);
-                _transformationController.value = newMatrix;
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _showLocalizationMethodDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Wybierz metodę lokalizacji'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: LocalizationMethod.values.map((method) {
-            return RadioListTile<LocalizationMethod>(
-              title: Text(method.toString().split('.').last),
-              value: method,
-              groupValue: _locationEngine.method,
-              onChanged: (value) {
-                Navigator.pop(context);
-                if (value != null) {
-                  _changeLocalizationMethod(value);
-                }
-              },
-            );
-          }).toList(),
-        ),
-        actions: [
-          TextButton(
-            child: Text('Anuluj'),
-            onPressed: () => Navigator.of(context).pop(),
-          ),
-        ],
-      ),
-    );
+    _locationEngine.setFloor(floorId);
+    _setInitialTransform(); // Ustaw ponownie transformację dla nowego piętra
   }
 
   IconData _getPoiIcon(String type) {
@@ -838,36 +228,441 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
       case 'room': return Colors.blue;
       case 'stairs': return Colors.orange;
       case 'elevator': return Colors.purple;
-      case 'wc': return Colors.teal;
+      case 'wc': return Colors.brown;
       case 'exit': return Colors.red;
       default: return Colors.grey;
     }
   }
-}
 
-class _GridPainter extends CustomPainter {
-  final double scale;
+  // Poprawiona metoda nawigacji
+  Future<void> _navigateToDestination(Poi poi) async {
+    final navigator = Navigator.of(context);
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
 
-  _GridPainter({required this.scale});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = Colors.grey.withOpacity(0.2)
-      ..strokeWidth = 0.5
-      ..style = PaintingStyle.stroke;
-
-    final gridSize = 50.0; // Stała wielkość siatki
-
-    for (double x = 0; x <= size.width; x += gridSize) {
-      canvas.drawLine(Offset(x, 0), Offset(x, size.height), paint);
+    // Sprawdź czy skanowanie jest aktywne
+    if (!_isScanning) {
+      await _startScanning();
+      // Poczekaj chwilę na pierwsze wyniki
+      await Future.delayed(const Duration(seconds: 2));
     }
 
-    for (double y = 0; y <= size.height; y += gridSize) {
-      canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
+    // Sprawdź czy mamy jakiekolwiek beacony
+    if (_beacons.isEmpty) {
+      scaffoldMessenger.showSnackBar(
+        const SnackBar(
+          content: Text('Brak sygnału beaconów. Upewnij się, że Bluetooth jest włączony.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
     }
+
+    // Sprawdź czy mamy aktualną lokalizację
+    if (_currentLocation == null) {
+      scaffoldMessenger.showSnackBar(
+        const SnackBar(
+          content: Text('Oczekiwanie na lokalizację...'),
+          backgroundColor: Colors.blue,
+        ),
+      );
+      // Poczekaj na lokalizację
+      await Future.delayed(const Duration(seconds: 3));
+
+      if (_currentLocation == null) {
+        scaffoldMessenger.showSnackBar(
+          const SnackBar(
+            content: Text('Nie udało się określić lokalizacji. Sprawdź czy jesteś w zasięgu beaconów.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+    }
+
+    navigator.push(
+      MaterialPageRoute(
+        builder: (context) => NavigationScreen(destination: poi),
+      ),
+    );
+  }
+
+  Widget _buildMapContent() {
+    final currentFloor = _floors.firstWhere(
+          (floor) => floor.id == _currentFloorId,
+      orElse: () => _floors.first,
+    );
+
+    return InteractiveViewer(
+      transformationController: _transformationController,
+      boundaryMargin: const EdgeInsets.all(100),
+      minScale: 0.1,
+      maxScale: 5.0,
+      child: SizedBox(
+        width: currentFloor.width,
+        height: currentFloor.height,
+        child: Stack(
+          children: [
+            // Tło mapy
+            if (currentFloor.imagePath != null)
+              Positioned.fill(
+                child: Image.asset(
+                  currentFloor.imagePath!,
+                  fit: BoxFit.contain,
+                ),
+              )
+            else
+              Positioned.fill(
+                child: Container(
+                  color: Colors.grey[200],
+                  child: Center(
+                    child: Text(
+                      currentFloor.name,
+                      style: TextStyle(
+                        fontSize: 24,
+                        color: Colors.grey[600],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+
+            // Beacony na aktualnym piętrze
+            ..._beacons
+                .where((beacon) => beacon.floorId == _currentFloorId)
+                .map((beacon) => Positioned(
+              left: beacon.x - 10,
+              top: beacon.y - 10,
+              child: Container(
+                width: 20,
+                height: 20,
+                decoration: BoxDecoration(
+                  color: beacon.rssi > -80 ? Colors.green : Colors.red,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white, width: 2),
+                ),
+                child: Center(
+                  child: Text(
+                    beacon.rssi.toString(),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 8,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ),
+            )),
+
+            // POI na aktualnym piętrze
+            ..._pois
+                .where((poi) => poi.floorId == _currentFloorId)
+                .map((poi) => Positioned(
+              left: poi.x - 15,
+              top: poi.y - 15,
+              child: GestureDetector(
+                onTap: () => _showPoiDetails(poi),
+                child: Container(
+                  width: 30,
+                  height: 30,
+                  decoration: BoxDecoration(
+                    color: _getPoiColor(poi.type),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white, width: 2),
+                  ),
+                  child: Icon(
+                    _getPoiIcon(poi.type),
+                    color: Colors.white,
+                    size: 16,
+                  ),
+                ),
+              ),
+            )),
+
+            // Aktualna pozycja użytkownika
+            if (_currentLocation != null && _currentLocation!.floorId == _currentFloorId)
+              Positioned(
+                left: _currentLocation!.x - 12,
+                top: _currentLocation!.y - 12,
+                child: Container(
+                  width: 24,
+                  height: 24,
+                  decoration: BoxDecoration(
+                    color: Colors.blue,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white, width: 3),
+                  ),
+                  child: const Icon(
+                    Icons.my_location,
+                    color: Colors.white,
+                    size: 12,
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showPoiDetails(Poi poi) {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(_getPoiIcon(poi.type), color: _getPoiColor(poi.type)),
+                const SizedBox(width: 8),
+                Text(
+                  poi.name,
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+            if (poi.description != null) ...[
+              const SizedBox(height: 8),
+              Text(poi.description!),
+            ],
+            if (poi.equipment.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              const Text(
+                'Wyposażenie:',
+                style: TextStyle(fontWeight: FontWeight.w500),
+              ),
+              ...poi.equipment.map((item) => Text('• $item')),
+            ],
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      _navigateToDestination(poi);
+                    },
+                    icon: const Icon(Icons.navigation),
+                    label: const Text('Nawiguj'),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Zamknij'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('Mapa - ${_floors.firstWhere((f) => f.id == _currentFloorId).name}'),
+        actions: [
+          // Przycisk wyszukiwania
+          IconButton(
+            icon: const Icon(Icons.search),
+            onPressed: () async {
+              final result = await Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => SearchScreen()),
+              );
+              if (result != null && result is Poi && mounted) {
+                _navigateToDestination(result);
+              }
+            },
+          ),
+          // Przycisk ustawień
+          IconButton(
+            icon: const Icon(Icons.settings),
+            onPressed: () => _showSettingsDialog(),
+          ),
+        ],
+      ),
+      body: Column(
+        children: [
+          // Panel statusu
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            decoration: BoxDecoration(
+              color: _hasPermissions && _isScanning ? Colors.green[100] : Colors.red[100],
+              border: Border(
+                bottom: BorderSide(color: Colors.grey.shade300),
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  _hasPermissions && _isScanning ? Icons.bluetooth_connected : Icons.bluetooth_disabled,
+                  color: _hasPermissions && _isScanning ? Colors.green : Colors.red,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    _hasPermissions && _isScanning
+                        ? 'Bluetooth aktywny | Beacony: ${_beacons.length} | Pozycja: ${_currentLocation != null ? "OK" : "Szukanie..."}'
+                        : 'Bluetooth wyłączony lub brak uprawnień',
+                    style: TextStyle(
+                      color: _hasPermissions && _isScanning ? Colors.green[800] : Colors.red[800],
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+                if (!_hasPermissions || !_isScanning)
+                  TextButton(
+                    onPressed: _hasPermissions ? _startScanning : _checkPermissions,
+                    child: Text(
+                      _hasPermissions ? 'Włącz' : 'Uprawnienia',
+                      style: TextStyle(color: Colors.red[800]),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+
+          // Selektor pięter
+          SizedBox(
+            height: 50,
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              itemCount: _floors.length,
+              itemBuilder: (context, index) {
+                final floor = _floors[index];
+                final isSelected = floor.id == _currentFloorId;
+                return Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                  child: ElevatedButton(
+                    onPressed: () => _changeFloor(floor.id),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: isSelected ? Theme.of(context).primaryColor : Colors.grey[300],
+                      foregroundColor: isSelected ? Colors.white : Colors.black,
+                    ),
+                    child: Text(floor.name),
+                  ),
+                );
+              },
+            ),
+          ),
+
+          // Mapa
+          Expanded(
+            child: _buildMapContent(),
+          ),
+        ],
+      ),
+      floatingActionButton: Column(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          FloatingActionButton(
+            heroTag: "center",
+            mini: true,
+            onPressed: _setInitialTransform,
+            tooltip: 'Wyśrodkuj mapę',
+            child: const Icon(Icons.center_focus_strong),
+          ),
+          const SizedBox(height: 8),
+          FloatingActionButton(
+            heroTag: "location",
+            mini: true,
+            onPressed: _currentLocation != null
+                ? () {
+              // Przejdź do piętra z aktualną pozycją
+              if (_currentLocation!.floorId != _currentFloorId) {
+                _changeFloor(_currentLocation!.floorId);
+              }
+
+              // Wyśrodkuj na aktualnej pozycji
+              final screenSize = MediaQuery.of(context).size;
+              final centerX = screenSize.width / 2 - _currentLocation!.x * _scale;
+              final centerY = (screenSize.height - 200) / 2 - _currentLocation!.y * _scale;
+
+              _transformationController.value = Matrix4.identity()
+                ..translate(centerX, centerY)
+                ..scale(_scale);
+            }
+                : null,
+            backgroundColor: _currentLocation != null ? null : Colors.grey,
+            tooltip: 'Moja pozycja',
+            child: const Icon(Icons.my_location),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showSettingsDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Ustawienia'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              title: const Text('Metoda lokalizacji'),
+              subtitle: Text(_locationEngine.method.toString().split('.').last),
+              trailing: const Icon(Icons.arrow_forward_ios),
+              onTap: () => _showLocalizationMethodDialog(),
+            ),
+            ListTile(
+              title: const Text('Reset pozycji'),
+              subtitle: const Text('Wyzeruj obliczoną pozycję'),
+              trailing: const Icon(Icons.refresh),
+              onTap: () {
+                _locationEngine.resetPosition();
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Pozycja została zresetowana')),
+                );
+              },
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Zamknij'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showLocalizationMethodDialog() {
+    Navigator.pop(context); // Zamknij dialog ustawień
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Metoda lokalizacji'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: LocalizationMethod.values.map((method) {
+            return RadioListTile<LocalizationMethod>(
+              title: Text(method.toString().split('.').last),
+              value: method,
+              groupValue: _locationEngine.method,
+              onChanged: (value) {
+                setState(() {
+                  _locationEngine.method = value!;
+                });
+                Navigator.pop(context);
+              },
+            );
+          }).toList(),
+        ),
+      ),
+    );
+  }
 }

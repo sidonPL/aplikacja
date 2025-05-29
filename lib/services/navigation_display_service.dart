@@ -1,5 +1,6 @@
 // lib/services/navigation_display_service.dart
 import 'dart:async';
+import 'dart:developer' as developer;
 import 'dart:math';
 import '../models/location.dart';
 import '../models/poi.dart';
@@ -30,51 +31,103 @@ class NavigationDisplayService {
         _poiRepository = poiRepository;
 
   Future<bool> startNavigation(String destinationId) async {
-    // Znajdź POI
-    final allPois = await _poiRepository.getPois();
-    final destination = allPois.firstWhere(
-            (poi) => poi.id == destinationId,
-        orElse: () => throw Exception('Nie znaleziono punktu docelowego')
-    );
+    try {
+      // Znajdź POI
+      final allPois = await _poiRepository.getPois();
+      final destination = allPois.firstWhere(
+              (poi) => poi.id == destinationId,
+          orElse: () => throw Exception('Nie znaleziono punktu docelowego')
+      );
 
-    // Pobierz aktualną lokalizację
-    Location? userLocation;
-    await for (final location in _locationEngine.location$) {
-      userLocation = location;
-      break;  // Pobierz tylko pierwszą lokalizację
-    }
+      // Znajdź waypoint powiązany z POI
+      final destinationWaypoint = await _poiRepository.getWaypointForPoi(destinationId);
+      if (destinationWaypoint == null) {
+        developer.log('Nie znaleziono waypoint dla POI: $destinationId');
+        return false;
+      }
 
-    if (userLocation == null) {
+      // Pobierz aktualną lokalizację z timeoutem
+      Location? userLocation;
+      
+      try {
+        userLocation = await _getCurrentLocationWithTimeout();
+      } catch (e) {
+        developer.log('Błąd pobierania lokalizacji: $e');
+        return false;
+      }
+
+      if (userLocation == null) {
+        developer.log('Nie udało się pobrać aktualnej lokalizacji');
+        return false;
+      }
+
+      developer.log('Znaleziono lokalizację: x=${userLocation.x}, y=${userLocation.y}, floor=${userLocation.floorId}');
+
+      // Oblicz trasę używając waypoint ID zamiast POI ID
+      final route = await _routeCalculator.calculateRoute(
+          userLocation,
+          destinationWaypoint.id  // Używamy waypoint ID
+      );
+
+      if (route == null) {
+        developer.log('Nie udało się obliczyć trasy');
+        return false;
+      }
+
+      developer.log('Obliczono trasę z ${route.segments.length} segmentami');
+
+      _currentRoute = route;
+      _currentSegmentIndex = 0;
+      _isNavigating = true;
+
+      // Powiadom o rozpoczęciu nawigacji
+      _navigationController.add(NavigationUpdate(
+        type: UpdateType.routeStarted,
+        route: route,
+        destination: destination,
+        currentSegmentIndex: 0,
+        distanceToNextWaypoint: route.segments.isNotEmpty ? route.segments[0].connection.distance : 0,
+      ));
+
+      // Rozpocznij nawigację
+      _startLocationUpdates();
+
+      return true;
+    } catch (e) {
+      developer.log('Błąd podczas rozpoczynania nawigacji: $e');
       return false;
     }
+  }
 
-    // Oblicz trasę
-    final route = await _routeCalculator.calculateRoute(
-        userLocation,
-        destination.id
-    );
-
-    if (route == null) {
-      return false;
-    }
-
-    _currentRoute = route;
-    _currentSegmentIndex = 0;
-    _isNavigating = true;
-
-    // Powiadom o rozpoczęciu nawigacji
-    _navigationController.add(NavigationUpdate(
-      type: UpdateType.routeStarted,
-      route: route,
-      destination: destination,
-      currentSegmentIndex: 0,
-      distanceToNextWaypoint: route.segments[0].connection.distance, // Zmieniono weight na distance
-    ));
-
-    // Rozpocznij nawigację
-    _startLocationUpdates();
-
-    return true;
+  // Nowa metoda z timeoutem dla pobierania lokalizacji
+  Future<Location?> _getCurrentLocationWithTimeout({Duration timeout = const Duration(seconds: 10)}) async {
+    final completer = Completer<Location?>();
+    late StreamSubscription subscription;
+    
+    // Ustawienie timeoutu
+    final timer = Timer(timeout, () {
+      if (!completer.isCompleted) {
+        subscription.cancel();
+        completer.complete(null);
+      }
+    });
+    
+    // Słuchanie na stream lokalizacji
+    subscription = _locationEngine.location$.listen((location) {
+      if (!completer.isCompleted) {
+        timer.cancel();
+        subscription.cancel();
+        completer.complete(location);
+      }
+    }, onError: (error) {
+      if (!completer.isCompleted) {
+        timer.cancel();
+        subscription.cancel();
+        completer.completeError(error);
+      }
+    });
+    
+    return completer.future;
   }
 
   void _startLocationUpdates() {
@@ -83,6 +136,11 @@ class NavigationDisplayService {
       if (!_isNavigating || _currentRoute == null) return;
 
       // Sprawdź, czy dotarliśmy do kolejnego punktu
+      if (_currentSegmentIndex >= _currentRoute!.segments.length) {
+        // Już dotarliśmy do celu
+        return;
+      }
+
       final currentSegment = _currentRoute!.segments[_currentSegmentIndex];
       final nextWaypoint = currentSegment.to;
 
@@ -92,7 +150,7 @@ class NavigationDisplayService {
       );
 
       // Odległość, przy której uznajemy punkt za osiągnięty
-      final waypointReachedThreshold = 2.0; // metry
+      const waypointReachedThreshold = 2.0; // metry
 
       if (distance < waypointReachedThreshold) {
         _currentSegmentIndex++;
@@ -115,7 +173,7 @@ class NavigationDisplayService {
           type: UpdateType.waypointReached,
           route: _currentRoute!,
           currentSegmentIndex: _currentSegmentIndex,
-          distanceToNextWaypoint: _currentRoute!.segments[_currentSegmentIndex].connection.distance, // Zmieniono weight na distance
+          distanceToNextWaypoint: _currentRoute!.segments[_currentSegmentIndex].connection.distance,
         ));
       } else {
         // Aktualizacja pozycji
@@ -127,6 +185,8 @@ class NavigationDisplayService {
           currentLocation: location,
         ));
       }
+    }, onError: (error) {
+      developer.log('Błąd w strumieniu lokalizacji: $error');
     });
   }
 
@@ -144,35 +204,34 @@ class NavigationDisplayService {
   void recalculateRoute() async {
     if (!_isNavigating || _currentRoute == null) return;
 
-    Location? userLocation;
-    await for (final location in _locationEngine.location$) {
-      userLocation = location;
-      break;
+    try {
+      final userLocation = await _getCurrentLocationWithTimeout();
+      if (userLocation == null) return;
+
+      // Znajdź cel obecnej trasy - ostatni waypoint
+      final destinationWaypointId = _currentRoute!.waypoints.last.id;
+
+      // Oblicz nową trasę
+      final newRoute = await _routeCalculator.calculateRoute(
+          userLocation,
+          destinationWaypointId
+      );
+
+      if (newRoute == null) return;
+
+      _currentRoute = newRoute;
+      _currentSegmentIndex = 0;
+
+      _navigationController.add(NavigationUpdate(
+        type: UpdateType.routeRecalculated,
+        route: newRoute,
+        currentSegmentIndex: 0,
+        distanceToNextWaypoint: newRoute.segments.isNotEmpty ? newRoute.segments[0].connection.distance : 0,
+        currentLocation: userLocation,
+      ));
+    } catch (e) {
+      developer.log('Błąd podczas przeliczania trasy: $e');
     }
-
-    if (userLocation == null) return;
-
-    // Znajdź cel obecnej trasy
-    final destinationWaypointId = _currentRoute!.waypoints.last.id;
-
-    // Oblicz nową trasę
-    final newRoute = await _routeCalculator.calculateRoute(
-        userLocation,
-        destinationWaypointId
-    );
-
-    if (newRoute == null) return;
-
-    _currentRoute = newRoute;
-    _currentSegmentIndex = 0;
-
-    _navigationController.add(NavigationUpdate(
-      type: UpdateType.routeRecalculated,
-      route: newRoute,
-      currentSegmentIndex: 0,
-      distanceToNextWaypoint: newRoute.segments[0].connection.distance, // Zmieniono weight na distance
-      currentLocation: userLocation,
-    ));
   }
 
   double getEstimatedTimeRemaining() {
@@ -180,11 +239,11 @@ class NavigationDisplayService {
 
     double remainingDistance = 0;
     for (int i = _currentSegmentIndex; i < _currentRoute!.segments.length; i++) {
-      remainingDistance += _currentRoute!.segments[i].connection.distance; // Zmieniono weight na distance
+      remainingDistance += _currentRoute!.segments[i].connection.distance;
     }
 
     // Szacowany czas w sekundach
-    final averageWalkingSpeed = 1.2; // metry/sekundę
+    const averageWalkingSpeed = 1.2; // metry/sekundę
     return remainingDistance / averageWalkingSpeed;
   }
 
