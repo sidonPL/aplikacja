@@ -13,6 +13,7 @@ class SettingsScreen extends StatefulWidget {
 class SettingsScreenState extends State<SettingsScreen> {
   LocalizationMethod? _selected;
   bool _isDarkMode = false;
+  double _updateInterval = 500;
 
   @override
   void initState() {
@@ -50,6 +51,32 @@ class SettingsScreenState extends State<SettingsScreen> {
               onChanged: (val) => setState(() => _selected = val),
             );
           }),
+
+          // Nowa sekcja: częstotliwość aktualizacji pozycji
+          const Padding(
+            padding: EdgeInsets.only(left: 16.0, top: 24.0, bottom: 8.0),
+            child: Text(
+              'Częstotliwość aktualizacji pozycji (ms)',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ),
+          Slider(
+            value: _updateInterval,
+            min: 200,
+            max: 2000,
+            divisions: 18,
+            label: _updateInterval.round().toString(),
+            onChanged: (val) {
+              setState(() {
+                _updateInterval = val;
+              });
+              // TODO: Przekazać do LocationEngine
+            },
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+            child: Text('Aktualnie: ${_updateInterval.round()} ms'),
+          ),
 
           // Sekcja wyglądu
           const Padding(

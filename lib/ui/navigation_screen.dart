@@ -1,5 +1,6 @@
 // lib/ui/navigation_screen.dart
 import 'dart:async';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import '../models/location.dart';
@@ -355,14 +356,16 @@ class _NavigationScreenState extends State<NavigationScreen> {
         width: mapWidth,
         height: mapHeight,
         color: Colors.grey[100],
-        child: CustomPaint(
-          size: Size(mapWidth, mapHeight),
-          painter: _NavigationMapPainter(
-            route: _route!,
-            currentSegmentIndex: _currentSegmentIndex,
-            currentLocation: _currentLocation,
-            scale: _scale,
-            destination: widget.destination,
+        child: RepaintBoundary(
+          child: CustomPaint(
+            size: Size(mapWidth, mapHeight),
+            painter: _NavigationMapPainter(
+              route: _route!,
+              currentSegmentIndex: _currentSegmentIndex,
+              currentLocation: _currentLocation,
+              scale: _scale,
+              destination: widget.destination,
+            ),
           ),
         ),
       ),
@@ -429,6 +432,12 @@ class _NavigationMapPainter extends CustomPainter {
   final double scale;
   final Poi destination;
 
+  static ui.Image? _staticLayerCache;
+  static int? _cacheRouteHash;
+  static int? _cacheSegmentIndex;
+  static double? _cacheScale;
+  static String? _cacheDestinationName;
+
   _NavigationMapPainter({
     required this.route,
     required this.currentSegmentIndex,
@@ -437,8 +446,7 @@ class _NavigationMapPainter extends CustomPainter {
     required this.destination,
   });
 
-  @override
-  void paint(Canvas canvas, Size size) {
+  void _drawStaticLayer(Canvas canvas, Size size) {
     // Maluj tło mapy
     final backgroundPaint = Paint()
       ..color = Colors.grey.shade100
@@ -450,63 +458,43 @@ class _NavigationMapPainter extends CustomPainter {
       ..color = Colors.green
       ..strokeWidth = 6.0
       ..style = PaintingStyle.stroke;
+    if (currentSegmentIndex > 0) {
+      final completedPath = Path();
+      final firstPoint = route.waypoints[0];
+      completedPath.moveTo(firstPoint.x * scale, firstPoint.y * scale);
+      for (int i = 1; i <= currentSegmentIndex; i++) {
+        final point = route.waypoints[i];
+        completedPath.lineTo(point.x * scale, point.y * scale);
+      }
+      canvas.drawPath(completedPath, completedPathPaint);
+    }
 
     // Malowanie pozostałej części trasy
     final remainingPathPaint = Paint()
       ..color = Colors.blue.shade300
       ..strokeWidth = 4.0
       ..style = PaintingStyle.stroke;
-
-    // Rysowanie punktów trasy
-    final waypointPaint = Paint()
-      ..color = Colors.blue
-      ..style = PaintingStyle.fill;
-
-    final currentWaypointPaint = Paint()
-      ..color = Colors.orange
-      ..style = PaintingStyle.fill;
-
-    final destinationPaint = Paint()
-      ..color = Colors.red
-      ..style = PaintingStyle.fill;
-
-    // Rysuj ścieżkę przebytą
-    if (currentSegmentIndex > 0) {
-      final completedPath = Path();
-      final firstPoint = route.waypoints[0];
-      completedPath.moveTo(firstPoint.x * scale, firstPoint.y * scale);
-
-      for (int i = 1; i <= currentSegmentIndex; i++) {
-        final point = route.waypoints[i];
-        completedPath.lineTo(point.x * scale, point.y * scale);
-      }
-
-      canvas.drawPath(completedPath, completedPathPaint);
-    }
-
-    // Rysuj pozostałą ścieżkę
     if (currentSegmentIndex < route.segments.length) {
       final remainingPath = Path();
       final startPoint = route.waypoints[currentSegmentIndex];
       remainingPath.moveTo(startPoint.x * scale, startPoint.y * scale);
-
       for (int i = currentSegmentIndex + 1; i < route.waypoints.length; i++) {
         final point = route.waypoints[i];
         remainingPath.lineTo(point.x * scale, point.y * scale);
       }
-
       canvas.drawPath(remainingPath, remainingPathPaint);
     }
 
-    // Rysuj punkty trasy
+    // Punkty trasy
+    final waypointPaint = Paint()..color = Colors.blue..style = PaintingStyle.fill;
+    final currentWaypointPaint = Paint()..color = Colors.orange..style = PaintingStyle.fill;
+    final destinationPaint = Paint()..color = Colors.red..style = PaintingStyle.fill;
     for (int i = 0; i < route.waypoints.length; i++) {
       final point = route.waypoints[i];
       final isCurrentPoint = i == currentSegmentIndex;
       final isDestination = i == route.waypoints.length - 1;
-
       final Paint pointPaint;
       double radius;
-
       if (isDestination) {
         pointPaint = destinationPaint;
         radius = 12.0;
@@ -517,13 +505,9 @@ class _NavigationMapPainter extends CustomPainter {
         pointPaint = waypointPaint;
         radius = 8.0;
       }
-
       canvas.drawCircle(Offset(point.x * scale, point.y * scale), radius, pointPaint);
-
-      // Dodaj etykiety dla istotnych punktów
       if (isCurrentPoint || isDestination) {
-        final label = isDestination ? destination.name : "Punkt ${i+1}";
-
+        final label = isDestination ? destination.name : "Punkt "+(i+1).toString();
         TextPainter textPainter = TextPainter(
           text: TextSpan(
             text: label,
@@ -546,26 +530,53 @@ class _NavigationMapPainter extends CustomPainter {
         );
       }
     }
+  }
 
-    // Rysuj aktualną pozycję użytkownika
+  @override
+  void paint(Canvas canvas, Size size) {
+    final routeHash = route.hashCode;
+    final segmentIndex = currentSegmentIndex;
+    final scaleVal = scale;
+    final destName = destination.name;
+    bool cacheValid = _staticLayerCache != null &&
+      _cacheRouteHash == routeHash &&
+      _cacheSegmentIndex == segmentIndex &&
+      _cacheScale == scaleVal &&
+      _cacheDestinationName == destName;
+    if (!cacheValid) {
+      final recorder = ui.PictureRecorder();
+      final staticCanvas = Canvas(recorder);
+      _drawStaticLayer(staticCanvas, size);
+      final picture = recorder.endRecording();
+      picture.toImage(size.width.toInt(), size.height.toInt()).then((img) {
+        _staticLayerCache = img;
+        _cacheRouteHash = routeHash;
+        _cacheSegmentIndex = segmentIndex;
+        _cacheScale = scaleVal;
+        _cacheDestinationName = destName;
+        // Wymuś repaint po wygenerowaniu cache
+      });
+      // Rysuj warstwę statyczną tymczasowo bez cache
+      _drawStaticLayer(canvas, size);
+    } else {
+      if (_staticLayerCache != null) {
+        canvas.drawImage(_staticLayerCache!, Offset.zero, Paint());
+      }
+    }
+    // Warstwa dynamiczna: pozycja użytkownika
     if (currentLocation != null) {
       final currentPosPaint = Paint()
         ..color = Colors.red
         ..style = PaintingStyle.fill;
-
       canvas.drawCircle(
         Offset(currentLocation!.x * scale, currentLocation!.y * scale),
         12.0,
         currentPosPaint,
       );
-
-      // Strzałka kierunkowa dla użytkownika
-      // W faktycznej implementacji użylibyśmy danych z kompasu
       final arrowPaint = Paint()
         ..color = Colors.white
         ..style = PaintingStyle.stroke
         ..strokeWidth = 2.0;
-
       final cx = currentLocation!.x * scale;
       final cy = currentLocation!.y * scale;
       canvas.drawLine(Offset(cx, cy), Offset(cx, cy - 15), arrowPaint);
@@ -575,5 +586,13 @@ class _NavigationMapPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
+  bool shouldRepaint(covariant _NavigationMapPainter oldDelegate) {
+    return oldDelegate.route != route ||
+        oldDelegate.currentSegmentIndex != currentSegmentIndex ||
+        oldDelegate.currentLocation?.x != currentLocation?.x ||
+        oldDelegate.currentLocation?.y != currentLocation?.y ||
+        oldDelegate.currentLocation?.floorId != currentLocation?.floorId ||
+        oldDelegate.scale != scale ||
+        oldDelegate.destination != destination;
+  }
 }

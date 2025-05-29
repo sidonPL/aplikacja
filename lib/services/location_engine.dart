@@ -23,16 +23,35 @@ class LocationEngine {
   int _currentFloorId = 0; // Dodane pole śledzące aktualne piętro
   StreamSubscription? _sensorSubscription;
 
+  int updateIntervalMs = 500; // domyślnie 500ms, można zmienić przez setter
+  final List<List<Beacon>> _beaconBuffer = [];
+  DateTime _lastUpdate = DateTime.fromMillisecondsSinceEpoch(0);
+
+  setUpdateInterval(int ms) {
+    updateIntervalMs = ms;
+  }
+
   Stream<Location> get location$ async* {
     await _loadFingerprintDB();
-    
     await for (final beacons in _ble.scanResults) {
       if (beacons.isEmpty) continue;
+
+      // Buforuj ostatnie 3 wyniki beaconów
+      _beaconBuffer.add(List<Beacon>.from(beacons));
+      if (_beaconBuffer.length > 3) _beaconBuffer.removeAt(0);
+
+      // Uśrednianie RSSI i pozycji beaconów
+      final averagedBeacons = _averageBeacons(_beaconBuffer);
+
+      // Throttling: emituj max co updateIntervalMs
+      final now = DateTime.now();
+      if (now.difference(_lastUpdate).inMilliseconds < updateIntervalMs) continue;
+      _lastUpdate = now;
 
       developer.log('LocationEngine: Otrzymano ${beacons.length} beaconów');
 
       // Filtruj beacony tylko dla aktualnego piętra
-      final floorBeacons = beacons.where((b) => b.floorId == _currentFloorId).toList();
+      final floorBeacons = averagedBeacons.where((b) => b.floorId == _currentFloorId).toList();
 
       developer.log('LocationEngine: ${floorBeacons.length} beaconów na piętrze $_currentFloorId');
 
@@ -62,7 +81,7 @@ class LocationEngine {
 
       // Użyj wszystkich beaconów lub tylko tych z aktualnego piętra
       final beaconsToUse = floorBeacons.length >= 3 ? floorBeacons : 
-          beacons.where((b) => b.floorId == _currentFloorId).toList();
+          averagedBeacons.where((b) => b.floorId == _currentFloorId).toList();
 
       if (beaconsToUse.isEmpty) {
         developer.log('LocationEngine: Brak beaconów do użycia');
@@ -342,5 +361,30 @@ class LocationEngine {
 
   void dispose() {
     _sensorSubscription?.cancel();
+  }
+
+  List<Beacon> _averageBeacons(List<List<Beacon>> buffer) {
+    if (buffer.isEmpty) return [];
+    final Map<String, List<Beacon>> grouped = {};
+    for (final list in buffer) {
+      for (final b in list) {
+        grouped.putIfAbsent(b.uuid, () => []).add(b);
+      }
+    }
+    return grouped.values.map((beaconList) {
+      final avgRssi = beaconList.map((b) => b.rssi).reduce((a, b) => a + b) ~/ beaconList.length;
+      final avgX = beaconList.map((b) => b.x).reduce((a, b) => a + b) / beaconList.length;
+      final avgY = beaconList.map((b) => b.y).reduce((a, b) => a + b) / beaconList.length;
+      final floorId = beaconList[0].floorId;
+      final name = beaconList[0].name;
+      return Beacon(
+        uuid: beaconList[0].uuid,
+        name: name,
+        rssi: avgRssi,
+        x: avgX,
+        y: avgY,
+        floorId: floorId,
+      );
+    }).toList();
   }
 }

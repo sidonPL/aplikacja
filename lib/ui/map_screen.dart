@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import '../config/localization_method_enum.dart';
 import '../models/beacon.dart';
 import '../models/location.dart';
@@ -52,6 +53,9 @@ class MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     Floor(id: 3, name: '3 Piętro', width: 2200.0, height: 878.0, imagePath: 'assets/images/Floor_3.png'),
   ];
 
+  DateTime? _backgroundTimestamp;
+  final Map<String, DateTime> _beaconLastSeen = {};
+
   @override
   void initState() {
     super.initState();
@@ -78,9 +82,21 @@ class MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      if (_isScanning) _startScanning();
+      if (_backgroundTimestamp != null) {
+        final diff = DateTime.now().difference(_backgroundTimestamp!);
+        if (diff.inMinutes > 5) {
+          // Nie wznawiaj automatycznie skanowania
+          setState(() => _isScanning = false);
+        } else if (_isScanning) {
+          _startScanning();
+        }
+        _backgroundTimestamp = null;
+      } else if (_isScanning) {
+        _startScanning();
+      }
     } else if (state == AppLifecycleState.paused) {
       _bleScanner.stopScan();
+      _backgroundTimestamp = DateTime.now();
     }
   }
 
@@ -153,6 +169,22 @@ class MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     }
   }
 
+  void _onBeacons(List<Beacon> beacons) {
+    final now = DateTime.now();
+    for (final b in beacons) {
+      _beaconLastSeen[b.uuid] = now;
+    }
+    // Usuń beacony nieaktywne >30s
+    _beacons = _beacons.where((b) => _beaconLastSeen[b.uuid] != null && now.difference(_beaconLastSeen[b.uuid]!).inSeconds <= 30).toList();
+    // Dodaj nowe beacony
+    for (final b in beacons) {
+      if (!_beacons.any((x) => x.uuid == b.uuid)) {
+        _beacons.add(b);
+      }
+    }
+    setState(() {});
+  }
+
   Future<void> _startScanning() async {
     if (!_hasPermissions || _isScanning) return;
 
@@ -162,21 +194,9 @@ class MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
       });
     }
 
-    _bleScanner.startScan();
+    _bleScanner.startScan(timeout: const Duration(seconds: 5));
 
-    _bleSubscription = _bleScanner.scanResults.listen((results) {
-      if (mounted) {
-        setState(() {
-          // Aktualizuj RSSI dla istniejących beaconów
-          for (final result in results) {
-            final index = _beacons.indexWhere((b) => b.uuid == result.uuid);
-            if (index != -1) {
-              _beacons[index] = _beacons[index].copyWith(rssi: result.rssi);
-            }
-          }
-        });
-      }
-    });
+    _bleSubscription = _bleScanner.scanResults.listen(_onBeacons);
 
     if (!_isLocationEngineRunning) {
       _startLocationEngine();
@@ -305,9 +325,22 @@ class MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
             // Tło mapy
             if (currentFloor.imagePath != null)
               Positioned.fill(
-                child: Image.asset(
-                  currentFloor.imagePath!,
-                  fit: BoxFit.contain,
+                child: Builder(
+                  builder: (context) {
+                    final svgPath = currentFloor.imagePath!.replaceAll('.png', '.svg');
+                    if (svgPath.endsWith('.svg')) {
+                      return SvgPicture.asset(
+                        svgPath,
+                        fit: BoxFit.contain,
+                        placeholderBuilder: (context) => Center(child: CircularProgressIndicator()),
+                      );
+                    } else {
+                      return Image.asset(
+                        currentFloor.imagePath!,
+                        fit: BoxFit.contain,
+                      );
+                    }
+                  },
                 ),
               )
             else
